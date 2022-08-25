@@ -1,9 +1,11 @@
 project(Hellocuda LANGUAGES CXX CUDA)
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.21)
 
 find_package(CUDA REQUIRED)
+message(STATUS)
+
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-    set(CMAKE_CUDA_ARCHITECTURES 70 75)
+    set(CMAKE_CUDA_ARCHITECTURES 70 75 80)
 endif(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
 
 

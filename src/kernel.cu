@@ -116,6 +116,7 @@ __global__ void matrixMultiply_kernel(Matrix A, Matrix B, Matrix C) {
         // printf("[IDX] : %d, [IDY] : %d, [VALUE] : %.2f\n", idx, idy, value);
     }
 
+
 }
 
 extern "C"
