@@ -2,7 +2,17 @@ project(Hellocuda LANGUAGES CXX CUDA)
 cmake_minimum_required(VERSION 3.21)
 
 find_package(CUDA REQUIRED)
-message(STATUS)
+
+find_package(Python REQUIRED)
+
+if(${Python_FOUND})   
+  message(STATUS "The Python Includes : ${Python_LIBRARIES}")
+  execute_process(COMMAND python -c
+  "import torch; print(torch.__path__[0]);"
+  OUTPUT_VARIABLE TORCH_OUTPUT OUTPUT_STRIP_TRAILING_WHITESPACE)
+  message(STATUS "${TORCH_OUTPUT}")
+  find_package(Torch REQUIRED HINTS ${TORCH_OUTPUT} NO_DEFAULT_PATH)
+endif()
 
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES 70 75 80)
@@ -32,5 +42,5 @@ target_link_libraries(kernel matrix)
 
 add_executable(main main.cpp)
 
-target_link_libraries(main kernel matrix)
+target_link_libraries(main kernel matrix ${TORCH_LIBRARIES} ${Python_LIBRARIES})
 

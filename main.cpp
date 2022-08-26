@@ -10,6 +10,10 @@
 #include "kernel.cuh"
 #include "Matrix.h"
 
+#include "torch/torch.h"
+
+using namespace at;
+
 extern "C"
 void vector_add(float* v1, float* v2, float* result, int n);
 
@@ -42,6 +46,17 @@ void matrixMultiply(Matrix A, Matrix B, Matrix C);
 
 //     return 0;
 // }
+
+
+int main() {
+    auto a = torch::randn({1, 20});
+    auto b = torch::randn({1, 20});
+    auto result = torch::zeros_like({a});
+    vector_add(a.data_ptr<float>(), b.data_ptr<float>(), result.data_ptr<float>(), 20);
+    std::cout << a + b << std::endl;
+    std::cout << result << std::endl;
+    return 0;
+}
 
 // void print(std::vector<std::vector<float>> const& v) {
 //     std::cout << "[";
@@ -82,27 +97,27 @@ void matrixMultiply(Matrix A, Matrix B, Matrix C);
 // }
 
 
-int main() {
-    Matrix A(10, 20);
-    Matrix B(20, 10);
-    Matrix C(A.m, B.n);
+// int main() {
+//     Matrix A(10, 20);
+//     Matrix B(20, 10);
+//     Matrix C(A.m, B.n);
 
-    A.initialElements();
-    B.initialElements();
-    C.initialElements();
+//     A.initialElements();
+//     B.initialElements();
+//     C.initialElements();
 
-    matrixMultiply(A, B, C);
+//     matrixMultiply(A, B, C);
 
-    for(int i = 0; i < C.m; i++) {
-        for(int j = 0; j < C.n; j++) {
-            std::cout << C.elements[i * C.n + j] << " "; 
-        }
-        std::cout << std::endl;
-    }
+//     for(int i = 0; i < C.m; i++) {
+//         for(int j = 0; j < C.n; j++) {
+//             std::cout << C.elements[i * C.n + j] << " "; 
+//         }
+//         std::cout << std::endl;
+//     }
 
-    delete[] A.elements;
-    delete[] B.elements;
-    delete[] C.elements;
+//     delete[] A.elements;
+//     delete[] B.elements;
+//     delete[] C.elements;
 
-    return 0;
-}
+//     return 0;
+// }
