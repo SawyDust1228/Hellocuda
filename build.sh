@@ -1,10 +1,11 @@
 #！ /usr/bin/bash
 
-# if [-d "./build"];then
-#     cd build
-# else
-#     mkdir build && cd build
-# fi
+if [ ! -d "build"];then
+    mkdir build
+else
+    echo "we already have build"
+fi
+
 cd build
 echo $(pwd)
 rm -rf *

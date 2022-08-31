@@ -23,6 +23,9 @@ void blur(std::vector<std::vector<float>>& matrix, std::vector<std::vector<float
 extern "C"
 void matrixMultiply(Matrix A, Matrix B, Matrix C);
 
+extern "C"
+void viewCudaDeviceInfo();
+
 // int main() {
 //     int size = 10 * sizeof(float);
 //     float* a;
@@ -49,6 +52,7 @@ void matrixMultiply(Matrix A, Matrix B, Matrix C);
 
 
 int main() {
+    viewCudaDeviceInfo();
     auto a = torch::randn({1, 20});
     auto b = torch::randn({1, 20});
     auto result = torch::zeros_like({a});

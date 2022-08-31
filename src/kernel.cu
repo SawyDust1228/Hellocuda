@@ -153,3 +153,17 @@ void matrixMultiply(Matrix A, Matrix B, Matrix C) {
     cudaFree(C_gpu.elements);
 
 }
+
+extern "C"
+void viewCudaDeviceInfo() {
+    int num_device;
+    cudaGetDeviceCount(&num_device);
+
+    cudaDeviceProp prop;
+    for(int i = 0; i < num_device; ++i) {
+        cudaGetDeviceProperties(&prop, i);
+    }
+
+    printf("[MAX_THREAD_PER_BLOCK] : %d, [SHARE_MEMORY_SIZE] : %d\n", prop.maxThreadsPerBlock, prop.sharedMemPerBlock);
+    
+}

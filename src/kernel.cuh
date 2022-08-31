@@ -27,4 +27,7 @@ __global__ void matrixMultiply_kernel(Matrix A, Matrix B, Matrix C);
 extern "C"
 void matrixMultiply(Matrix A, Matrix B, Matrix C);
 
+extern "C"
+void viewCudaDeviceInfo();
+
 #endif
