@@ -1,6 +1,7 @@
 
 #include "kernel.cuh"
 
+#define DEBUG
 
 __global__ void vector_add_device(float* v1, float* v2, float* result, int n) {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -164,6 +165,58 @@ void viewCudaDeviceInfo() {
         cudaGetDeviceProperties(&prop, i);
     }
 
-    printf("[MAX_THREAD_PER_BLOCK] : %d, [SHARE_MEMORY_SIZE] : %d\n", prop.maxThreadsPerBlock, prop.sharedMemPerBlock);
+    printf("[NUM_DEVICES] : %d, [MAX_THREAD_PER_BLOCK] : %d, [SHARE_MEMORY_SIZE] : %d\n", num_device, prop.maxThreadsPerBlock, prop.sharedMemPerBlock);
     
+}
+
+__device__ bool is_valid_conv1d(int index, int n) {
+    if(index > -1 && index < n) {
+        return true;
+    }
+    return false;
+}
+
+template<typename T>
+__global__ void conv1d_kernel(T* v, T* result, T* m, int n, int k) {
+    int step  = (k - 1) / 2;
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if(idx < n) {
+        for(int i = -step; i <= step; ++i) {
+            if(is_valid_conv1d(i + idx, n)) {
+                result[idx] += v[i + idx] * m[step + i];
+            }
+        }
+    }
+}
+
+
+extern "C"
+void conv1d(float* v, float* result, float* m, int n, int k) {
+    assert(k % 2 == 1);
+    float* v_gpu;
+    float* result_gpu;
+    float* m_gpu;
+    int size = sizeof(float) * n;
+    int size_mask = sizeof(float) * k;
+    cudaMalloc((void**) &v_gpu, size);
+    cudaMalloc((void**) &result_gpu, size);
+    cudaMalloc((void**) &m_gpu, size_mask);
+
+    cudaMemcpy(v_gpu, v, size, cudaMemcpyHostToDevice);
+    cudaMemset(result_gpu, 0., size);
+    cudaMemcpy(m_gpu, m, size_mask, cudaMemcpyHostToDevice);
+
+
+    dim3 grid(ceil(n / 256.));
+    dim3 block(256);
+#ifdef DEBUG
+    printf("[GRID X] : %d, [BLOCK X] : %d\n", grid.x, block.x);
+#endif
+    conv1d_kernel<<<grid, block>>>(v_gpu, result_gpu, m_gpu, n, k);
+
+    cudaMemcpy(result, result_gpu, size, cudaMemcpyDeviceToHost);
+    
+    cudaFree(v_gpu);
+    cudaFree(result_gpu);
+    cudaFree(m_gpu);
 }

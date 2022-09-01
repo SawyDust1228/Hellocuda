@@ -30,4 +30,11 @@ void matrixMultiply(Matrix A, Matrix B, Matrix C);
 extern "C"
 void viewCudaDeviceInfo();
 
+template<typename T>
+__global__ void conv1d_kernel(T* v, T* result, T* m, int n, int k);
+
+extern "C"
+void conv1d(float* v, float* result, float* m, int n, int k);
+
+
 #endif

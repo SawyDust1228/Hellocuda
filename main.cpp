@@ -6,12 +6,13 @@
 #include <stdio.h>
 #include <iostream>
 #include <vector>
+#include <memory>
 
 #include "kernel.cuh"
 #include "Matrix.h"
 
 #include "torch/torch.h"
-
+#define _DEBUG
 using namespace at;
 
 extern "C"
@@ -25,6 +26,9 @@ void matrixMultiply(Matrix A, Matrix B, Matrix C);
 
 extern "C"
 void viewCudaDeviceInfo();
+
+extern "C"
+void conv1d(float* v, float* result, float* m, int n, int k);
 
 // int main() {
 //     int size = 10 * sizeof(float);
@@ -51,14 +55,42 @@ void viewCudaDeviceInfo();
 // }
 
 
+struct Conv1dNet : torch::nn::Module
+{
+    Conv1dNet(int k) 
+    :conv1(register_module("conv1", torch::nn::Conv1d(torch::nn::Conv1dOptions(1, 1, k).stride(1).padding((k - 1) / 2).bias(false))))
+    { }
+    torch::Tensor forward(torch::Tensor const& input) {
+        auto x = conv1(input);
+        return x;
+    }
+    
+    torch::nn::Conv1d conv1{nullptr};
+};
+
+
+
 int main() {
-    viewCudaDeviceInfo();
+    // viewCudaDeviceInfo();
+    int k = 5;
     auto a = torch::randn({1, 20});
-    auto b = torch::randn({1, 20});
-    auto result = torch::zeros_like({a});
-    vector_add(a.data_ptr<float>(), b.data_ptr<float>(), result.data_ptr<float>(), 20);
-    std::cout << a + b << std::endl;
-    std::cout << result << std::endl;
+
+    auto net = std::make_shared<Conv1dNet>(Conv1dNet(k));
+#ifdef _DEBUG
+    std::cout << *net << std::endl;
+#endif
+    auto result_net = net->forward(a);
+    std::cout << result_net << std::endl;
+
+    for(auto const& para : net->parameters()) {
+        std::cout << para << std::endl;
+        auto result = torch::zeros_like(a);
+        conv1d(a.data_ptr<float>(), result.data_ptr<float>(), para.data_ptr<float>(), 20, 5);
+        std::cout << result << std::endl;
+    }
+    
+    // vector_add(a.data_ptr<float>(), b.data_ptr<float>(), result.data_ptr<float>(), 20);
+    
     return 0;
 }
 
