@@ -207,8 +207,6 @@ __global__ void conv1d_kernel_constant(T* v, T* result, int n, int k) {
     }
 }
 
-
-
 extern "C"
 void conv1d(float* v, float* result, float* m, int n, int k) {
     assert(k % 2 == 1);
@@ -242,4 +240,75 @@ void conv1d(float* v, float* result, float* m, int n, int k) {
     cudaFree(v_gpu);
     cudaFree(result_gpu);
     cudaFree(m_gpu);
+}
+
+template<typename T>
+__global__ void mergeSort_kernel(T* v, T* temp, int n) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    for(int i = 2; i < 2 * n; i *= 2) {
+        int len = i;
+        if(n - idx < i) {
+            len = n - idx;
+        }
+
+
+        if(idx % i == 0) {
+            T* subA = &v[idx];
+            int lenA = i / 2, k = 0;
+
+            T* subB = &v[idx + lenA];
+            int lenB = len - lenA, j = 0;
+
+            int p = idx;
+            while (/* condition */ k < lenA && j < lenB)
+            {
+                /* code */
+                if(subA[k] < subB[j]) {
+                    temp[p++] = subA[k];
+                    k++;
+                } else {
+                    temp[p++] = subB[j];
+                    j++;
+                }
+            }
+
+            while(k < lenA) {
+                temp[p++] = subA[k];
+                k++;
+            }
+            
+            while(j < lenB) {
+                temp[p++] = subB[j];
+                j++;
+            }
+
+            for(int m = idx; m < idx + len; m++) {
+                v[m] = temp[m];
+            }
+        }
+        __syncthreads();
+
+    }
+}
+
+extern "C" 
+void mergeSort(float* vector, int n) {
+    float* vector_gpu;
+    float* temp_gpu;
+    int size = sizeof(float) * n;
+    cudaMalloc((void**) &vector_gpu, size);
+    cudaMalloc((void**) &temp_gpu, size);
+
+    cudaMemcpy(vector_gpu, vector, size, cudaMemcpyHostToDevice);
+    cudaMemset(temp_gpu, 0, size);
+
+    dim3 grid(ceil(n / 256.));
+    dim3 block(ceil(256));
+
+    mergeSort_kernel<<<grid, block>>>(vector_gpu, temp_gpu, n);
+    cudaThreadSynchronize();
+
+    cudaMemcpy(vector, vector_gpu, size, cudaMemcpyDeviceToHost);
+    cudaFree(vector_gpu);
+    cudaFree(temp_gpu);
 }

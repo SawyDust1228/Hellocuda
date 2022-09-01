@@ -40,5 +40,14 @@ __global__ void conv1d_kernel_constant(T* v, T* result, int n, int k);
 extern "C"
 void conv1d(float* v, float* result, float* m, int n, int k);
 
+template<typename T>
+__global__ void mergeSort_kernel(T* v, T*temp, int n);
+
+
+extern "C" void mergeSort(float* vector, int n);
+
+
+
+
 
 #endif

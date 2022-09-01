@@ -30,6 +30,17 @@ void viewCudaDeviceInfo();
 extern "C"
 void conv1d(float* v, float* result, float* m, int n, int k);
 
+extern "C" 
+void mergeSort(float* vector, int n);
+
+int main() {
+    int n = 20;
+    auto a = torch::randn({1, n});
+    std::cout << a << std::endl;
+    mergeSort(a.data_ptr<float>(), n);
+    std::cout << a << std::endl;
+}
+
 // int main() {
 //     int size = 10 * sizeof(float);
 //     float* a;
@@ -55,44 +66,44 @@ void conv1d(float* v, float* result, float* m, int n, int k);
 // }
 
 
-struct Conv1dNet : torch::nn::Module
-{
-    Conv1dNet(int k) 
-    :conv1(register_module("conv1", torch::nn::Conv1d(torch::nn::Conv1dOptions(1, 1, k).stride(1).padding((k - 1) / 2).bias(false))))
-    { }
-    torch::Tensor forward(torch::Tensor const& input) {
-        auto x = conv1(input);
-        return x;
-    }
+// struct Conv1dNet : torch::nn::Module
+// {
+//     Conv1dNet(int k) 
+//     :conv1(register_module("conv1", torch::nn::Conv1d(torch::nn::Conv1dOptions(1, 1, k).stride(1).padding((k - 1) / 2).bias(false))))
+//     { }
+//     torch::Tensor forward(torch::Tensor const& input) {
+//         auto x = conv1(input);
+//         return x;
+//     }
     
-    torch::nn::Conv1d conv1{nullptr};
-};
+//     torch::nn::Conv1d conv1{nullptr};
+// };
 
 
 
-int main() {
-    // viewCudaDeviceInfo();
-    int k = 5;
-    auto a = torch::randn({1, 20});
+// int main() {
+//     // viewCudaDeviceInfo();
+//     int k = 5;
+//     auto a = torch::randn({1, 20});
 
-    auto net = std::make_shared<Conv1dNet>(Conv1dNet(k));
-#ifdef _DEBUG
-    std::cout << *net << std::endl;
-#endif
-    auto result_net = net->forward(a);
-    std::cout << result_net << std::endl;
+//     auto net = std::make_shared<Conv1dNet>(Conv1dNet(k));
+// #ifdef _DEBUG
+//     std::cout << *net << std::endl;
+// #endif
+//     auto result_net = net->forward(a);
+//     std::cout << result_net << std::endl;
 
-    for(auto const& para : net->parameters()) {
-        std::cout << para << std::endl;
-        auto result = torch::zeros_like(a);
-        conv1d(a.data_ptr<float>(), result.data_ptr<float>(), para.data_ptr<float>(), 20, 5);
-        std::cout << result << std::endl;
-    }
+//     for(auto const& para : net->parameters()) {
+//         std::cout << para << std::endl;
+//         auto result = torch::zeros_like(a);
+//         conv1d(a.data_ptr<float>(), result.data_ptr<float>(), para.data_ptr<float>(), 20, 5);
+//         std::cout << result << std::endl;
+//     }
+
+//     // vector_add(a.data_ptr<float>(), b.data_ptr<float>(), result.data_ptr<float>(), 20);
     
-    // vector_add(a.data_ptr<float>(), b.data_ptr<float>(), result.data_ptr<float>(), 20);
-    
-    return 0;
-}
+//     return 0;
+// }
 
 // void print(std::vector<std::vector<float>> const& v) {
 //     std::cout << "[";
