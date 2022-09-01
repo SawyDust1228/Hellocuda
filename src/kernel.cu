@@ -1,11 +1,12 @@
 
 #include "kernel.cuh"
 
-// #define DEBUG
+#define DEBUG
 
 #define CONST_MEMORY 25
-
+#define MAX_NODES 1000
 __constant__ float weight[CONST_MEMORY];
+__constant__ node nodes[MAX_NODES];
 
 __global__ void vector_add_device(float* v1, float* v2, float* result, int n) {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -358,5 +359,152 @@ void vector_sum(const float* vector, int n, float* result) {
     cudaFree(vector_gpu);
     delete[] v;
 }
+
+
+
+__global__ void BFS_kernel(int* V, int* E, int* F, int* visited, int num_v, int* result) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+#ifdef DEBUG
+    // printf("[THREAD_ID] : %d\n", idx);
+#endif
+
+    if(idx < num_v) {
+        if(F[idx]) {
+            F[idx] = 0;
+            visited[idx] = 1;
+            *result += nodes[idx].value;
+            for(int i = V[idx]; i < V[idx + 1]; ++i) {
+                if(!visited[E[i]]) {
+                    F[E[i]] = 1;
+                }
+            } 
+        }
+    }
+}
+
+__global__ void is_all_zero(int* vector, int n, int* result) {
+    int idx =  blockDim.x * blockIdx.x + threadIdx.x;
+    if(idx < n) {
+        atomicAdd(result, vector[idx]);
+    }
+}
+
+extern "C"
+void BFS(std::vector<std::vector<int>> const& graph, std::vector<int> const& values, int* result) {
+    int n = values.size();
+    node* ns = new node[values.size()];
+    std::vector<int> V, E; V.push_back(0);
+    for(int i = 0 ; i < n; ++i) {
+        ns[i].id = i;
+        ns[i].value = values[i];
+        for(auto const& id : graph[i]) {
+            E.push_back(id);
+        }
+        V.push_back(E.size());
+    }
+
+    int* V_gpu;
+    int* E_gpu;
+    int* F_gpu;
+    int* visited_gpu;
+    int* F_temp;
+    
+
+    cudaMalloc((void**) &V_gpu, sizeof(int) * V.size());
+    cudaMalloc((void**) &E_gpu, sizeof(int) * E.size());
+    cudaMallocManaged((void**) &F_gpu, sizeof(int) * n);
+    cudaMallocManaged((void**) &visited_gpu, sizeof(int) * n);
+    cudaMallocManaged((void**) &F_temp, sizeof(int) * n);
+
+    cudaMemset(F_gpu, 0, sizeof(int) * n); F_gpu[0] = 1;
+#ifdef DEBUG
+    printf("%d\n", F_gpu[0]);
+    for(int i = 0; i < V.size(); i++) {
+        std::cout << V[i] << " ";
+    }
+    std::cout << std::endl;
+    for(int i = 0; i < E.size(); i++) {
+        std::cout << E[i] << " ";
+    }
+#endif
+    cudaMemset(visited_gpu, 0, sizeof(int) * n);
+    cudaMemcpy(V_gpu, V.data(), sizeof(int) * V.size(), cudaMemcpyHostToDevice);
+    cudaMemcpy(E_gpu, E.data(), sizeof(int) * E.size(), cudaMemcpyHostToDevice);
+    cudaMemcpy(F_temp, F_gpu, sizeof(int) * n, cudaMemcpyDeviceToDevice);
+    cudaMemcpyToSymbol(nodes, ns, sizeof(node) * n);
+
+    dim3 grid(ceil(n / 256.));
+    dim3 block(256);
+
+    Lock mylock;
+
+#ifdef DEBUG
+    printf("[GRID X] : %d, [BLOCK X] : %d\n", grid.x, block.x);
+#endif
+    // initial_F<<<1, 1>>>(F_gpu);
+    is_all_zero<<<grid, block>>>(F_temp, n);
+    int count = 0;
+    while(F_temp[0] != 0) {
+#ifdef DEBUG
+        printf("[ITER] : %d", count);
+        printf("[F_TEMP] : %d", F_temp[0]);
+#endif
+        BFS_kernel<<<grid, block>>>(V_gpu, E_gpu, F_gpu, visited_gpu, n, result, mylock);
+        cudaDeviceSynchronize();
+        cudaMemcpy(F_temp, F_gpu, sizeof(int) * n, cudaMemcpyDeviceToDevice);
+        is_all_zero<<<grid, block>>>(F_temp, n);
+        count++;
+    }
+    
+
+    cudaFree(V_gpu);
+    cudaFree(E_gpu);
+    cudaFree(F_gpu);
+    cudaFree(visited_gpu);
+    cudaFree(F_temp);
+    
+
+
+    delete[] ns; 
+}
+
+__global__ void vector_add_new_kernel(float* vector, float* result, int n) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+// #ifdef DEBUG
+//     printf("[ID] : %d\n", idx);
+// #endif
+    if(idx < n) {
+        // *result += vector[idx];
+        atomicAdd(result, vector[idx]);
+    }
+}
+
+extern "C"
+void vector_add_new(float* vector, float* result, int n) {
+    *result = 0;
+    float* vector_gpu;
+    float* result_gpu;
+
+    cudaMallocManaged((void**) &result_gpu, sizeof(float));
+    *result_gpu = 0.;
+    cudaMalloc((void**) &vector_gpu, sizeof(float) * n);
+    cudaMemcpy(vector_gpu, vector, n * sizeof(float), cudaMemcpyHostToDevice);
+
+    dim3 grid(ceil(n / 256.)), block(256);
+#ifdef DEBUG
+    printf("[GRID X] : %d, [BLOCK X] : %d\n", grid.x, block.x);
+#endif
+    vector_add_new_kernel<<<grid, block>>>(vector_gpu, result_gpu, n);
+    cudaDeviceSynchronize();
+    cudaMemcpy(result, result_gpu, sizeof(float), cudaMemcpyDeviceToHost);
+    printf("[RESULT] : %.2f", *result);
+
+    cudaFree(vector_gpu);
+    cudaFree(result_gpu);
+}
+
+
+
 
 

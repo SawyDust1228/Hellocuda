@@ -51,8 +51,22 @@ __global__ void vector_sum_kernel(T* vector, int n, T* result);
 extern "C"
 void vector_sum(const float* vector, int n, float* result);
 
+__global__ void BFS_kernel(int* V, int* E, int* F, int* visited, int num_v, int* result);
+
+struct node
+{
+    /* data */
+    int id;
+    int value;
+};
 
 
+extern "C"
+void BFS(std::vector<std::vector<int>> const& graph, std::vector<int> const& values, int* result);
+
+
+extern "C"
+void vector_add_new(float* vector, float* result, int n);
 
 
 #endif

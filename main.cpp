@@ -36,14 +36,51 @@ void mergeSort(float* vector, int n);
 extern "C"
 void vector_sum(const float* vector, int n, float* result);
 
+struct node;
+
+extern "C"
+void BFS(std::vector<std::vector<int>> const& graph, std::vector<int> const& values, int* result);
+
+extern "C"
+void vector_add_new(float* vector, float* result, int n);
+
 int main() {
+
+    int n = 10;
     float result;
-    int n = 10000;
     auto a = torch::ones({1, n}, torch::kFloat);
-    vector_sum(a.data_ptr<float>(), n, &result);
-    // std::cout << a.sum().item<float>() << std::endl;
-    std::cout << result << std::endl;
+    vector_add_new(a.data_ptr<float>(), &result, n);
+    return 0;
 }
+// int main() {
+//     int n = 10;
+//     std::vector<int> values;
+//     std::vector<std::vector<int>> graph;
+//     for(int i = 0; i < n; ++i) {
+//         values.push_back(1);
+//         graph.push_back(std::vector<int>());
+//         for(int j = 0 ; j < n; j++) {
+//             if(i != j) {
+//                 graph[i].push_back(j);
+//             }
+//         }
+//     }
+
+//     int result = 0;
+//     BFS(graph, values, &result);
+
+//     std::cout << result << std::endl;
+    
+// }
+
+// int main() {
+//     float result;
+//     int n = 10000;
+//     auto a = torch::ones({1, n}, torch::kFloat);
+//     vector_sum(a.data_ptr<float>(), n, &result);
+//     // std::cout << a.sum().item<float>() << std::endl;
+//     std::cout << result << std::endl;
+// }
 
 // int main() {
 //     int n = 20;
