@@ -3,6 +3,10 @@
 
 #define DEBUG
 
+#define CONST_MEMORY 25
+
+__constant__ float weight[CONST_MEMORY];
+
 __global__ void vector_add_device(float* v1, float* v2, float* result, int n) {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
     if(id < n) {
@@ -190,6 +194,21 @@ __global__ void conv1d_kernel(T* v, T* result, T* m, int n, int k) {
 }
 
 
+template<typename T>
+__global__ void conv1d_kernel_constant(T* v, T* result, int n, int k) {
+    int step  = (k - 1) / 2;
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if(idx < n) {
+        for(int i = -step; i <= step; ++i) {
+            if(is_valid_conv1d(i + idx, n)) {
+                result[idx] += v[i + idx] * weight[step + i];
+            }
+        }
+    }
+}
+
+
+
 extern "C"
 void conv1d(float* v, float* result, float* m, int n, int k) {
     assert(k % 2 == 1);
@@ -198,22 +217,26 @@ void conv1d(float* v, float* result, float* m, int n, int k) {
     float* m_gpu;
     int size = sizeof(float) * n;
     int size_mask = sizeof(float) * k;
+
+    
     cudaMalloc((void**) &v_gpu, size);
     cudaMalloc((void**) &result_gpu, size);
     cudaMalloc((void**) &m_gpu, size_mask);
 
     cudaMemcpy(v_gpu, v, size, cudaMemcpyHostToDevice);
     cudaMemset(result_gpu, 0., size);
+    cudaMemcpyToSymbol(weight, m, size_mask);
     cudaMemcpy(m_gpu, m, size_mask, cudaMemcpyHostToDevice);
-
 
     dim3 grid(ceil(n / 256.));
     dim3 block(256);
 #ifdef DEBUG
     printf("[GRID X] : %d, [BLOCK X] : %d\n", grid.x, block.x);
 #endif
-    conv1d_kernel<<<grid, block>>>(v_gpu, result_gpu, m_gpu, n, k);
+    // conv1d_kernel<<<grid, block>>>(v_gpu, result_gpu, m_gpu, n, k);
 
+    conv1d_kernel_constant<<<grid, block>>>(v_gpu, result_gpu, n, k);
+    cudaDeviceSynchronize();
     cudaMemcpy(result, result_gpu, size, cudaMemcpyDeviceToHost);
     
     cudaFree(v_gpu);
