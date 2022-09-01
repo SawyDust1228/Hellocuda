@@ -43,8 +43,13 @@ void conv1d(float* v, float* result, float* m, int n, int k);
 template<typename T>
 __global__ void mergeSort_kernel(T* v, T*temp, int n);
 
-
 extern "C" void mergeSort(float* vector, int n);
+
+template<typename T>
+__global__ void vector_sum_kernel(T* vector, int n, T* result);
+
+extern "C"
+void vector_sum(const float* vector, int n, float* result);
 
 
 

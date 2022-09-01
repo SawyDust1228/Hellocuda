@@ -33,13 +33,25 @@ void conv1d(float* v, float* result, float* m, int n, int k);
 extern "C" 
 void mergeSort(float* vector, int n);
 
+extern "C"
+void vector_sum(const float* vector, int n, float* result);
+
 int main() {
-    int n = 20;
-    auto a = torch::randn({1, n});
-    std::cout << a << std::endl;
-    mergeSort(a.data_ptr<float>(), n);
-    std::cout << a << std::endl;
+    float result;
+    int n = 10000;
+    auto a = torch::ones({1, n}, torch::kFloat);
+    vector_sum(a.data_ptr<float>(), n, &result);
+    // std::cout << a.sum().item<float>() << std::endl;
+    std::cout << result << std::endl;
 }
+
+// int main() {
+//     int n = 20;
+//     auto a = torch::randn({1, n});
+//     std::cout << a << std::endl;
+//     mergeSort(a.data_ptr<float>(), n);
+//     std::cout << a << std::endl;
+// }
 
 // int main() {
 //     int size = 10 * sizeof(float);

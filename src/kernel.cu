@@ -1,7 +1,7 @@
 
 #include "kernel.cuh"
 
-#define DEBUG
+// #define DEBUG
 
 #define CONST_MEMORY 25
 
@@ -306,9 +306,57 @@ void mergeSort(float* vector, int n) {
     dim3 block(ceil(256));
 
     mergeSort_kernel<<<grid, block>>>(vector_gpu, temp_gpu, n);
-    cudaThreadSynchronize();
+    cudaDeviceSynchronize();
 
     cudaMemcpy(vector, vector_gpu, size, cudaMemcpyDeviceToHost);
     cudaFree(vector_gpu);
     cudaFree(temp_gpu);
 }
+
+
+template<typename T>
+__global__ void vector_sum_kernel(T* vector, int n, T* result) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if(idx < n) {
+        for(int i = 2 ; i < 2 * n; i *= 2) {
+            if(idx % i == 0) {
+                int index = idx + i / 2;
+                if(index < n) {
+                    vector[idx] += vector[index];
+                }
+            }
+            __syncthreads();
+        }
+    }
+}
+
+extern "C"
+void vector_sum(const float* vector, int n, float* result) {
+    float* vector_gpu;
+    float* v = new float[n];
+    int size = sizeof(float) * n;
+    cudaMalloc((void **) &vector_gpu, size);
+    cudaMemcpy(vector_gpu, vector, size, cudaMemcpyHostToDevice);
+
+    dim3 grid(ceil( n / 256.));
+    dim3 block(256);
+
+#ifdef DEBUG
+    printf("[GRID X] : %d, [BLOCK X] : %d\n", grid.x, block.x);
+#endif
+
+    vector_sum_kernel<<<grid, block>>>(vector_gpu, n, result);
+    cudaMemcpy(v, vector_gpu, size, cudaMemcpyDeviceToHost);
+#ifdef DEBUG
+    printf("[");
+    for(int i = 0; i < n; ++i) {
+        printf("%.2f, ", v[i]);
+    }
+    printf("]\n");
+#endif
+    *result = v[0];
+    cudaFree(vector_gpu);
+    delete[] v;
+}
+
+
