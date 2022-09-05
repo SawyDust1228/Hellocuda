@@ -68,5 +68,11 @@ void BFS(std::vector<std::vector<int>> const& graph, std::vector<int> const& val
 extern "C"
 void vector_add_new(float* vector, float* result, int n);
 
+extern "C"
+void FFT1D(float* vector , float* real, float* image, int n);
+
+extern "C"
+void FFTCONV1D(float* vector , float* kernel, float* result, int k , int n);
+
 
 #endif

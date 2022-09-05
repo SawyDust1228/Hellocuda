@@ -1,9 +1,17 @@
 project(Hellocuda LANGUAGES CXX CUDA)
 cmake_minimum_required(VERSION 3.21)
 
+
+include_directories(${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/include /usr/local/cuda/include )
+
 find_package(CUDA REQUIRED)
 
 find_package(Python REQUIRED)
+
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES 70 75 80)
+    message(STATUS "CMAKE_CUDA_ARCHITECTURES : ${CMAKE_CUDA_ARCHITECTURES}")
+endif(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
 
 if(${Python_FOUND})   
   message(STATUS "The Python Includes : ${Python_LIBRARIES}")
@@ -13,11 +21,6 @@ if(${Python_FOUND})
   message(STATUS "${TORCH_OUTPUT}")
   find_package(Torch REQUIRED HINTS ${TORCH_OUTPUT} NO_DEFAULT_PATH)
 endif()
-
-if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-    set(CMAKE_CUDA_ARCHITECTURES 70 75 80)
-endif(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-
 
 
 include_directories(CMAKE_INCLUDE_CURRENT_DIR

@@ -1,7 +1,8 @@
 
 #include "kernel.cuh"
+#include <cufft.h>
 
-#define DEBUG
+// #define DEBUG
 
 #define CONST_MEMORY 25
 #define MAX_NODES 1000
@@ -373,10 +374,12 @@ __global__ void BFS_kernel(int* V, int* E, int* F, int* visited, int num_v, int*
         if(F[idx]) {
             F[idx] = 0;
             visited[idx] = 1;
-            *result += nodes[idx].value;
+            // *result += nodes[idx].value;
+
+            atomicAdd(result, nodes[idx].value);
             for(int i = V[idx]; i < V[idx + 1]; ++i) {
                 if(!visited[E[i]]) {
-                    F[E[i]] = 1;
+                    atomicAdd(&F[E[i]], 1) ;
                 }
             } 
         }
@@ -408,61 +411,64 @@ void BFS(std::vector<std::vector<int>> const& graph, std::vector<int> const& val
     int* E_gpu;
     int* F_gpu;
     int* visited_gpu;
-    int* F_temp;
+    int* flag;
+    int* result_gpu;
     
 
     cudaMalloc((void**) &V_gpu, sizeof(int) * V.size());
     cudaMalloc((void**) &E_gpu, sizeof(int) * E.size());
     cudaMallocManaged((void**) &F_gpu, sizeof(int) * n);
     cudaMallocManaged((void**) &visited_gpu, sizeof(int) * n);
-    cudaMallocManaged((void**) &F_temp, sizeof(int) * n);
+    cudaMallocManaged((void**) &flag, sizeof(int));
+    cudaMallocManaged((void**) &result_gpu, sizeof(int));
 
     cudaMemset(F_gpu, 0, sizeof(int) * n); F_gpu[0] = 1;
-#ifdef DEBUG
-    printf("%d\n", F_gpu[0]);
-    for(int i = 0; i < V.size(); i++) {
-        std::cout << V[i] << " ";
-    }
-    std::cout << std::endl;
-    for(int i = 0; i < E.size(); i++) {
-        std::cout << E[i] << " ";
-    }
-#endif
+// #ifdef DEBUG
+//     printf("%d\n", F_gpu[0]);
+//     for(int i = 0; i < V.size(); i++) {
+//         std::cout << V[i] << " ";
+//     }
+//     std::cout << std::endl;
+//     for(int i = 0; i < E.size(); i++) {
+//         std::cout << E[i] << " ";
+//     }
+// #endif
     cudaMemset(visited_gpu, 0, sizeof(int) * n);
     cudaMemcpy(V_gpu, V.data(), sizeof(int) * V.size(), cudaMemcpyHostToDevice);
     cudaMemcpy(E_gpu, E.data(), sizeof(int) * E.size(), cudaMemcpyHostToDevice);
-    cudaMemcpy(F_temp, F_gpu, sizeof(int) * n, cudaMemcpyDeviceToDevice);
     cudaMemcpyToSymbol(nodes, ns, sizeof(node) * n);
 
     dim3 grid(ceil(n / 256.));
     dim3 block(256);
 
-    Lock mylock;
-
 #ifdef DEBUG
     printf("[GRID X] : %d, [BLOCK X] : %d\n", grid.x, block.x);
 #endif
-    // initial_F<<<1, 1>>>(F_gpu);
-    is_all_zero<<<grid, block>>>(F_temp, n);
-    int count = 0;
-    while(F_temp[0] != 0) {
+    *flag = 0;
+    *result_gpu = 0;
+    is_all_zero<<<grid, block>>>(F_gpu, n, flag);
 #ifdef DEBUG
-        printf("[ITER] : %d", count);
-        printf("[F_TEMP] : %d", F_temp[0]);
+        printf("[FGPU] : %d\n", F_gpu[0]);
+        printf("[F_TEMP] : %d\n", *flag);
 #endif
-        BFS_kernel<<<grid, block>>>(V_gpu, E_gpu, F_gpu, visited_gpu, n, result, mylock);
+    while(*flag != 0) {
+#ifdef DEBUG
+        printf("[F_TEMP] : %d\n", F_gpu[0]);
+#endif
+        BFS_kernel<<<grid, block>>>(V_gpu, E_gpu, F_gpu, visited_gpu, n, result_gpu);
         cudaDeviceSynchronize();
-        cudaMemcpy(F_temp, F_gpu, sizeof(int) * n, cudaMemcpyDeviceToDevice);
-        is_all_zero<<<grid, block>>>(F_temp, n);
-        count++;
+        *flag = 0;
+        is_all_zero<<<grid, block>>>(F_gpu, n, flag);
     }
+
+    cudaMemcpy(result, result_gpu, sizeof(int), cudaMemcpyDeviceToHost);
     
 
     cudaFree(V_gpu);
     cudaFree(E_gpu);
     cudaFree(F_gpu);
     cudaFree(visited_gpu);
-    cudaFree(F_temp);
+    cudaFree(flag);
     
 
 
@@ -502,6 +508,116 @@ void vector_add_new(float* vector, float* result, int n) {
 
     cudaFree(vector_gpu);
     cudaFree(result_gpu);
+}
+
+
+__global__ void realToComplex(float* vector, cufftComplex* vector_complex, int n) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if(idx < n) {
+        vector_complex[idx].x = vector[idx];
+        vector_complex[idx].y = 0.0;
+    }
+}
+
+__global__ void complexToCPU(cufftComplex* vector_complex, float* real, float* image, int n) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if(idx < n) {
+        real[idx] = vector_complex[idx].x;
+        image[idx] = vector_complex[idx].y;
+    }
+}
+
+extern "C"
+void FFT1D(float* vector , float* real, float* image, int n) {
+    float* vector_gpu, *real_gpu, *image_gpu;
+    cudaMalloc((void**) &vector_gpu, sizeof(float) * n);
+    cudaMalloc((void**) &real_gpu, sizeof(float) * n);
+    cudaMalloc((void**) &image_gpu, sizeof(float) * n);
+    cudaMemcpy(vector_gpu, vector, sizeof(float) * n, cudaMemcpyHostToDevice);
+
+    cufftComplex *vector_complex, *fft_result;
+    cudaMalloc((void**) &vector_complex, sizeof(cufftComplex) * n);
+    cudaMalloc((void**) &fft_result, sizeof(cufftComplex) * n);
+    dim3 grid(ceil(n / 256.));
+    dim3 block(256);
+
+    realToComplex<<<grid, block>>>(vector_gpu, vector_complex, n);
+    cufftHandle plan;
+    cufftPlan1d(&plan, n, CUFFT_C2C, 1);
+    cufftExecC2C(plan, vector_complex, fft_result, CUFFT_FORWARD);
+    complexToCPU<<<grid, block>>>(fft_result, real_gpu, image_gpu, n);
+    cudaMemcpy(real, real_gpu, sizeof(float) * n, cudaMemcpyDeviceToHost);
+    cudaMemcpy(image, image_gpu, sizeof(float) * n, cudaMemcpyDeviceToHost);
+
+    cufftDestroy(plan);
+    cudaFree(vector_gpu);
+    cudaFree(real_gpu);
+    cudaFree(image_gpu);
+    cudaFree(vector_complex);
+    cudaFree(fft_result);
+}
+
+__global__ void complexMul(cufftComplex* v1, cufftComplex* v2, cufftComplex* result, int n) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if(idx < n) {
+        result[idx].x = (v1[idx].x * v2[idx].x - v1[idx].y * v2[idx].y) / n;
+        result[idx].y = (v1[idx].x * v2[idx].y + v1[idx].y * v2[idx].x) / n;
+    }
+}
+
+__global__ void complexToReal(cufftComplex* complex, float* result, int n) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if(idx < n) {
+        result[idx] = complex[idx].x / n;
+    }
+}
+
+
+void FFTCONV1D(float* vector , float* kernel, float* result, int k , int n) {
+    float* vector_gpu, *kernel_gpu, *result_gpu;
+    cudaMalloc((void**) &vector_gpu, sizeof(float) * n);
+    cudaMalloc((void**) &kernel_gpu, sizeof(float) * n);
+    cudaMalloc((void**) &result_gpu, sizeof(float) * n);
+
+    cudaMemcpy(vector_gpu, vector, sizeof(float) * n, cudaMemcpyHostToDevice);
+    cudaMemset(kernel_gpu, 0., sizeof(float) * n);
+    cudaMemcpy(kernel_gpu, kernel, sizeof(float) * k, cudaMemcpyHostToDevice);
+
+    cufftComplex *vector_fft;
+    cudaMalloc((void**) &vector_fft, sizeof(cufftComplex) * n);
+
+    cufftComplex *kernel_fft, *cov_result_gpu;
+    cudaMalloc((void**) &kernel_fft, sizeof(cufftComplex) * n);
+    cudaMalloc((void**) &cov_result_gpu, sizeof(cufftComplex) * n);
+
+    dim3 grid(ceil(n / 256.));
+    dim3 block(256);
+
+    cufftHandle plan;
+    cufftPlan1d(&plan, n, CUFFT_R2C, 1);
+    cufftExecR2C(plan, vector_gpu, vector_fft);
+    cufftExecR2C(plan, kernel_gpu, kernel_fft);
+
+
+
+    complexMul<<<grid, block>>>(vector_fft, kernel_fft, cov_result_gpu, n);
+    cufftHandle plan_I;
+    cufftPlan1d(&plan_I, n, CUFFT_C2R, 1);
+    cufftExecC2R(plan_I, cov_result_gpu, result_gpu);
+
+    cudaMemcpy(result, result_gpu, sizeof(float) * n, cudaMemcpyDeviceToHost);
+
+    cufftDestroy(plan);
+    cufftDestroy(plan_I);
+    cudaFree(vector_gpu);
+    cudaFree(kernel_gpu);
+    cudaFree(result_gpu);
+
+    cudaFree(vector_fft);
+
+    cudaFree(kernel_fft);
+    cudaFree(cov_result_gpu);
+
 }
 
 

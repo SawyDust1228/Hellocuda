@@ -44,14 +44,59 @@ void BFS(std::vector<std::vector<int>> const& graph, std::vector<int> const& val
 extern "C"
 void vector_add_new(float* vector, float* result, int n);
 
-int main() {
+extern "C"
+void FFT1D(float* vector , float* real, float* image, int n);
 
-    int n = 10;
-    float result;
-    auto a = torch::ones({1, n}, torch::kFloat);
-    vector_add_new(a.data_ptr<float>(), &result, n);
+extern "C"
+void FFTCONV1D(float* vector , float* kernel, float* result, int k , int n);
+
+struct Conv1dNet : torch::nn::Module
+{
+    Conv1dNet(int k) 
+    :conv1(register_module("conv1", torch::nn::Conv1d(torch::nn::Conv1dOptions(1, 1, k).stride(1).padding((k - 1) / 2).bias(false))))
+    {
+        for(auto& para : this->parameters()) {
+            for(int i = 0; i < k; ++i) {
+                auto ptr = para.data_ptr<float>();
+                *(ptr + i) = 1.;
+            }
+        }
+    }
+    torch::Tensor forward(torch::Tensor const& input) {
+        auto x = conv1(input);
+        return x;
+    }
+    
+    torch::nn::Conv1d conv1{nullptr};
+};
+
+int main() {
+    int n = 20;
+    int k = 5;
+    auto net = std::make_shared<Conv1dNet>(Conv1dNet(k));
+    auto a = torch::ones({1, n});
+    auto kernel = torch::ones({1, k});
+    auto result_net = net->forward(a);
+
+    std::cout << "Pytorch Result : " <<result_net << std::endl;
+    auto result = torch::zeros_like(a);
+    conv1d(a.data_ptr<float>(), result.data_ptr<float>(), kernel.data_ptr<float>(), n, k);
+    std::cout << "Simple Conv Result" <<result << std::endl;
+
+    FFTCONV1D(a.data_ptr<float>(), kernel.data_ptr<float>(), result.data_ptr<float>(), k, n);
+    std::cout << "FFT Result" <<result << std::endl;
     return 0;
 }
+
+// int main() {
+
+//     int n = 10;
+//     float result;
+//     auto a = torch::ones({1, n}, torch::kFloat);
+//     vector_add_new(a.data_ptr<float>(), &result, n);
+//     return 0;
+// }
+
 // int main() {
 //     int n = 10;
 //     std::vector<int> values;
