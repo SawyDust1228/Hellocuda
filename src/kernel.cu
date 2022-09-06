@@ -172,6 +172,7 @@ void viewCudaDeviceInfo() {
     }
 
     printf("[NUM_DEVICES] : %d, [MAX_THREAD_PER_BLOCK] : %d, [SHARE_MEMORY_SIZE] : %d\n", num_device, prop.maxThreadsPerBlock, prop.sharedMemPerBlock);
+    printf("[MAX_BLOCK_X_SIZE] : %d, [MAX_BLOCK_Y_SIZE] : %d, [MAX_BLCOK_Z_SIZE] : %d\n", prop.maxGridSize[0], prop.maxGridSize[1], prop.maxGridSize[2]);
     
 }
 
@@ -618,6 +619,133 @@ void FFTCONV1D(float* vector , float* kernel, float* result, int k , int n) {
     cudaFree(kernel_fft);
     cudaFree(cov_result_gpu);
 
+}
+
+__global__ void MatrixElementMult_kernel(float* m1, float* m2, float* result, int m, int n) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    int idy = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if(idx < m && idy < n) {
+        int index = idx * n + idy;
+        result[index] = m1[index] * m2[index];
+    }
+}
+
+
+extern "C"
+void MatrixElementMult(float* m1, float* m2, float* result, int m, int n) {
+    float *m1_gpu, *m2_gpu, *result_gpu;
+    int size = sizeof(float) * m * n;
+    cudaMalloc((void**) &m1_gpu, size);
+    cudaMalloc((void**) &m2_gpu, size);
+    cudaMalloc((void**) &result_gpu, size);
+    cudaMemcpy(m1_gpu, m1, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(m2_gpu, m2, size, cudaMemcpyHostToDevice);
+    cudaMemset(result_gpu, 0., size);
+    dim3 grid(ceil(m / 16.), ceil(n / 16.));
+    dim3 block(16, 16);
+
+#ifdef DEBUG
+    printf("[GRID X] : %d, [BLOCK X] : %d\n", grid.x, block.x);
+#endif
+
+    MatrixElementMult_kernel<<<grid, block>>>(m1_gpu, m2_gpu, result_gpu, m, n);
+    cudaDeviceSynchronize();
+    cudaMemcpy(result, result_gpu, size, cudaMemcpyDeviceToHost);
+
+    cudaFree(m1_gpu);
+    cudaFree(m2_gpu);
+    cudaFree(result_gpu);
+}
+
+
+__device__ __host__ void ComplexMultFunction(cufftComplex& input1, cufftComplex& input2, cufftComplex& output, int n, bool need_scale) {
+    if(need_scale) {
+        output.x = (input1.x * input2.x - input1.y * input2.y) / n;
+        output.y = (input1.x * input2.y + input1.y * input2.x) / n;
+    }else{
+        output.x = input1.x * input2.x - input1.y * input2.y;
+        output.y = input1.x * input2.y + input1.y * input2.x;
+    }
+}
+
+__global__ void FFTCONV2D_kernel(cufftComplex* matrix, cufftComplex* kernel, cufftComplex* result, int m, int n, bool need_scale) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    int idy = blockDim.y * blockIdx.y + threadIdx.y;
+
+    int index = idy * m + idx;
+
+    if(idx < m && idy < n) {
+        ComplexMultFunction(matrix[index], kernel[index], result[index], m * n, need_scale);
+    }
+    // printf("[IDX] : %d, [IDY] : %d", idx, idy);
+}
+
+extern "C"
+void FFTCONV2D(float* m1, float* m2 , float* result, int m, int n, int k) {
+    bool scale = true;
+    assert(k < m && k < n);
+    float *m1_gpu, *m2_gpu, *result_gpu;
+    int size = sizeof(float) * m * n;
+    cudaMallocManaged((void **) &m1_gpu, size);
+    cudaMallocManaged((void **) &m2_gpu, size);
+    cudaMallocManaged((void **) &result_gpu, size);
+
+    cudaMemset(m2_gpu, 0, size);
+    for(int i = 0; i < k; ++i) {
+        for(int j = 0; j < k; ++j) {
+            m2_gpu[i * n + j] = m2[i * k + j];
+        }
+    }
+
+    cudaMemcpy(m1_gpu, m1, size, cudaMemcpyHostToDevice);
+
+    int size_fft = sizeof(cufftComplex) * m * n; 
+    cufftComplex *m1_fft, *m2_fft, *result_fft;
+    cudaMallocManaged((void **) &m1_fft, size_fft);
+    cudaMallocManaged((void **) &m2_fft, size_fft);
+    cudaMallocManaged((void **) &result_fft, size_fft);
+
+    cufftHandle fftPlan;
+    cufftPlan2d(&fftPlan, m, n, CUFFT_R2C);
+    cufftExecR2C(fftPlan, m1_gpu, m1_fft);
+    cufftExecR2C(fftPlan, m2_gpu, m2_fft);
+
+    cudaError_t err = cudaGetLastError();
+    
+
+    cudaFree(m1_gpu);
+    cudaFree(m2_gpu);
+    cufftDestroy(fftPlan);
+
+    dim3 grid(ceil(m / 32.), ceil(n / 32.));
+    dim3 block(32, 32);
+
+#ifdef DEBUG
+    printf("[GRID X] : %d, [BLOCK X] : %d, [GRID Y] : %d, [BLOCK Y] : %d\n",grid.x, block.x, grid.y, block.y);
+#endif
+
+    FFTCONV2D_kernel<<<grid, block>>>(m1_fft, m2_fft, result_fft, m, n, scale);
+    
+    if (err != cudaSuccess) {
+        printf("CUDA Error: %s\n", cudaGetErrorString(err));
+        viewCudaDeviceInfo();
+        exit(-1);
+    } 
+    
+    cudaDeviceSynchronize();
+    
+    cudaFree(m1_fft);
+    cudaFree(m2_fft);
+
+    cufftHandle ifftPlan;
+    cufftPlan2d(&ifftPlan, m, n, CUFFT_C2R);
+    cufftExecC2R(ifftPlan, result_fft, result_gpu);
+    cudaFree(result_fft);
+    cufftDestroy(ifftPlan);
+
+    cudaMemcpy(result, result_gpu, size, cudaMemcpyDeviceToHost);
+    cudaFree(result_gpu);
 }
 
 

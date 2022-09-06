@@ -74,5 +74,11 @@ void FFT1D(float* vector , float* real, float* image, int n);
 extern "C"
 void FFTCONV1D(float* vector , float* kernel, float* result, int k , int n);
 
+extern "C"
+void MatrixElementMult(float* m1, float* m2, float* result, int m, int n);
+
+extern "C"
+void FFTCONV2D(float* m1, float* m2 , float* result, int m, int n, int k);
+
 
 #endif

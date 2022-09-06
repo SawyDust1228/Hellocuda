@@ -50,6 +50,12 @@ void FFT1D(float* vector , float* real, float* image, int n);
 extern "C"
 void FFTCONV1D(float* vector , float* kernel, float* result, int k , int n);
 
+extern "C"
+void FFTCONV2D(float* m1, float* m2 , float* result, int m, int n, int k);
+
+extern "C"
+void MatrixElementMult(float* m1, float* m2, float* result, int m, int n);
+
 struct Conv1dNet : torch::nn::Module
 {
     Conv1dNet(int k) 
@@ -71,20 +77,34 @@ struct Conv1dNet : torch::nn::Module
 };
 
 int main() {
-    int n = 20;
-    int k = 5;
-    auto net = std::make_shared<Conv1dNet>(Conv1dNet(k));
-    auto a = torch::ones({1, n});
-    auto kernel = torch::ones({1, k});
-    auto result_net = net->forward(a);
+    viewCudaDeviceInfo();
+    // int n = 20;
+    // int k = 5;
+    // auto net = std::make_shared<Conv1dNet>(Conv1dNet(k));
+    // auto a = torch::ones({1, n});
+    // auto kernel = torch::ones({1, k});
+    // auto result_net = net->forward(a);
 
-    std::cout << "Pytorch Result : " <<result_net << std::endl;
-    auto result = torch::zeros_like(a);
-    conv1d(a.data_ptr<float>(), result.data_ptr<float>(), kernel.data_ptr<float>(), n, k);
-    std::cout << "Simple Conv Result" <<result << std::endl;
+    // std::cout << "Pytorch Result : " <<result_net << std::endl;
+    // auto result = torch::zeros_like(a);
+    // conv1d(a.data_ptr<float>(), result.data_ptr<float>(), kernel.data_ptr<float>(), n, k);
+    // std::cout << "Simple Conv Result" <<result << std::endl;
 
-    FFTCONV1D(a.data_ptr<float>(), kernel.data_ptr<float>(), result.data_ptr<float>(), k, n);
-    std::cout << "FFT Result" <<result << std::endl;
+    // FFTCONV1D(a.data_ptr<float>(), kernel.data_ptr<float>(), result.data_ptr<float>(), k, n);
+    // std::cout << "FFT Result" <<result << std::endl;
+
+    auto matrix = torch::ones({10, 10});
+    auto matrix2 = 2 * torch::ones({10, 10});
+    auto kernel55 = torch::ones({5, 5});
+    auto result_matrix = torch::ones_like(matrix);
+    // std::cout  << matrix << std::endl;
+
+    MatrixElementMult(matrix.data_ptr<float>(), matrix2.data_ptr<float>(), result_matrix.data_ptr<float>(), 10, 10);
+    std::cout << result_matrix << std::endl;
+
+    FFTCONV2D(matrix.data_ptr<float>(), kernel55.data_ptr<float>(), result_matrix.data_ptr<float>(), 10, 10, 5);
+    std::cout << result_matrix << std::endl;
+
     return 0;
 }
 
